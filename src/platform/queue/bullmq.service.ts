@@ -34,7 +34,7 @@ export class BullMqService
   // would mean passing an incompatible one. Revisit when the two agree.
   constructor(@Inject(QUEUE_OPTIONS) private readonly options: QueueModuleOptions) {
     for (const definition of QUEUE_DEFINITIONS) {
-      this.queues.set(
+      this.register(
         definition.name,
         new Queue(definition.name, {
           connection: { url: options.redisUrl, connectionName: options.applicationName },
@@ -59,6 +59,23 @@ export class BullMqService
         }),
       );
     }
+  }
+
+  /**
+   * A Queue is an EventEmitter over its own Redis client, and a connection that
+   * drops mid-command reports through it. Without a listener that arrives as an
+   * unhandled rejection instead — which is how a clean shutdown ends up failing
+   * the process, and how a test run ends up red with every test passing.
+   */
+  private register(name: QueueName, queue: Queue): void {
+    queue.on('error', (error: Error) => {
+      this.logger.warn({
+        msg: 'bullmq queue connection error',
+        queue: name,
+        err: describeError(error),
+      });
+    });
+    this.queues.set(name, queue);
   }
 
   async onModuleInit(): Promise<void> {
@@ -236,7 +253,10 @@ export class BullMqService
     if (await this.completesWithin(worker.close())) return;
 
     this.logger.warn({ msg: 'forcing BullMQ worker shutdown', queue: worker.name });
-    await worker.close(true);
+    // The forced close drops the socket under whatever was still in flight, so
+    // it can reject on its own. It is already the fallback path; letting it
+    // throw would abort the shutdown of everything queued behind it.
+    await this.quietly(() => worker.close(true), 'forced worker close', worker.name);
   }
 
   private async closeQueue(queue: Queue): Promise<void> {
@@ -246,7 +266,19 @@ export class BullMqService
       msg: 'disconnecting BullMQ queue after shutdown deadline',
       queue: queue.name,
     });
-    await queue.disconnect();
+    await this.quietly(() => queue.disconnect(), 'queue disconnect', queue.name);
+  }
+
+  private async quietly(
+    operation: () => Promise<void>,
+    step: string,
+    queue: string,
+  ): Promise<void> {
+    try {
+      await operation();
+    } catch (error) {
+      this.logger.warn({ msg: `${step} failed`, queue, err: describeError(error) });
+    }
   }
 
   private async completesWithin(operation: Promise<void>): Promise<boolean> {

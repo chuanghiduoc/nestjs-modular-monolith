@@ -7,6 +7,18 @@ import { newId } from '#shared/util';
 const POLL_INTERVAL_MS = 25;
 const DEFAULT_WAIT_TIMEOUT_MS = 20_000;
 
+/**
+ * The shutdown deadline is deliberately generous here.
+ *
+ * When it expires, the service falls back to `disconnect()` while `close()` is
+ * still in flight, and ioredis then rejects whatever was on the wire with
+ * "Connection is closed." — an unhandled rejection that fails the whole run with
+ * every test passing. A container-backed suite closes sixteen queues at once on
+ * a shared CI runner, so five seconds is a deadline it can genuinely miss.
+ * Production keeps its own, much shorter, deadline.
+ */
+const TEST_SHUTDOWN_TIMEOUT_MS = 30_000;
+
 export function createTestQueue(redisUrl: string, concurrency = 1): BullMqService {
   return new BullMqService({
     redisUrl,
@@ -14,7 +26,7 @@ export function createTestQueue(redisUrl: string, concurrency = 1): BullMqServic
     concurrency,
     startWorkers: true,
     registerSchedules: false,
-    shutdownTimeoutMs: 5_000,
+    shutdownTimeoutMs: TEST_SHUTDOWN_TIMEOUT_MS,
   });
 }
 

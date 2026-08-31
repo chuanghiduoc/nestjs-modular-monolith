@@ -30,7 +30,10 @@ describe('BullMqEventPublisher (integration)', () => {
       concurrency: 1,
       startWorkers: false,
       registerSchedules: false,
-      shutdownTimeoutMs: 5_000,
+      // Generous on purpose: see the note on TEST_SHUTDOWN_TIMEOUT_MS in
+      // test/support/queue.ts — a deadline that expires mid-close turns into an
+      // unhandled "Connection is closed." rejection and fails a green run.
+      shutdownTimeoutMs: 30_000,
     });
     await queue.onModuleInit();
     publisher = new BullMqEventPublisher(queue);
