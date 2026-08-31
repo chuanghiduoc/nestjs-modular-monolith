@@ -253,9 +253,12 @@ jobs:
             sleep 2
           done
 
-          docker run --rm --network smoke minio/mc:RELEASE.2025-08-13T08-35-41Z \
-            sh -c 'mc alias set local http://minio:9000 minioadmin minioadmin &&
-                   mc mb --ignore-existing local/app-uploads'
+          # --entrypoint is required: the image entrypoint is `mc` itself, so a
+          # bare `sh -c ...` is passed to mc as a subcommand and it exits 1.
+          docker run --rm --network smoke --entrypoint sh \
+            minio/mc:RELEASE.2025-08-13T08-35-41Z \
+            -c 'mc alias set local http://minio:9000 minioadmin minioadmin &&
+                mc mb --ignore-existing local/app-uploads'
 
           cat > smoke.env <<'EOF'
           NODE_ENV=production
