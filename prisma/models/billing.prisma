@@ -1,0 +1,62 @@
+enum SubscriptionStatus {
+  trialing
+  active
+  past_due
+  canceled
+  paused
+
+  @@map("subscription_status")
+  @@schema("billing")
+}
+
+model Plan {
+  id            String         @id @db.Uuid
+  code          String         @unique @db.VarChar(64)
+  name          String         @db.VarChar(120)
+  active        Boolean        @default(true)
+  entitlements  Json           @default("{}")
+  createdAt     DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt     DateTime       @updatedAt @map("updated_at") @db.Timestamptz(3)
+  subscriptions Subscription[]
+
+  @@map("plan")
+  @@schema("billing")
+}
+
+model Subscription {
+  id               String             @id @db.Uuid
+  organizationId   String             @unique @map("organization_id") @db.Uuid
+  planId           String             @map("plan_id") @db.Uuid
+  status           SubscriptionStatus
+  provider         String             @db.VarChar(32)
+  providerRef      String?            @map("provider_ref") @db.VarChar(255)
+  currentPeriodEnd DateTime?          @map("current_period_end") @db.Timestamptz(3)
+  createdAt        DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt        DateTime           @updatedAt @map("updated_at") @db.Timestamptz(3)
+  plan             Plan               @relation(fields: [planId], references: [id], onDelete: Restrict)
+  organization     Organization       @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+
+  @@index([planId, status])
+  @@map("subscription")
+  @@schema("billing")
+}
+
+model BillingWebhookInboxEvent {
+  id              String    @id @db.Uuid
+  provider        String    @db.VarChar(32)
+  providerEventId String    @map("provider_event_id") @db.VarChar(255)
+  payload         Json
+  receivedAt      DateTime  @default(now()) @map("received_at") @db.Timestamptz(3)
+  processingAt    DateTime? @map("processing_at") @db.Timestamptz(3)
+  processingToken String?   @map("processing_token") @db.Uuid
+  processedAt     DateTime? @map("processed_at") @db.Timestamptz(3)
+  failedAt        DateTime? @map("failed_at") @db.Timestamptz(3)
+  lastError       String?   @map("last_error") @db.VarChar(2000)
+
+  @@unique([provider, providerEventId])
+  @@index([provider, processedAt])
+  @@index([processingAt])
+  @@index([failedAt])
+  @@map("webhook_inbox_event")
+  @@schema("billing")
+}

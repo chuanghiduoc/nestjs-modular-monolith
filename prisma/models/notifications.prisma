@@ -1,0 +1,16 @@
+/// One row per notification that has actually been handed to a provider.
+///
+/// The queue guarantees at-least-once delivery and the deduplication window is
+/// measured in minutes, while a retry backoff runs for hours — so without a
+/// durable ledger the same welcome or invitation mail goes out twice. Audit rows
+/// and profiles are idempotent through their own keys; email is the one visible
+/// side effect that needs its own.
+model SentNotification {
+  idempotencyKey String   @id @map("idempotency_key") @db.VarChar(128)
+  channel        String   @db.VarChar(32)
+  sentAt         DateTime @default(now()) @map("sent_at") @db.Timestamptz(3)
+
+  @@index([sentAt])
+  @@map("sent_notification")
+  @@schema("notifications")
+}

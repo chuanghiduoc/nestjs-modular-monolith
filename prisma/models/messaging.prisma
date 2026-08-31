@@ -1,0 +1,19 @@
+model OutboxEvent {
+  eventId        String    @id @map("event_id") @db.Uuid
+  occurredAt     DateTime  @map("occurred_at") @db.Timestamptz(3)
+  eventName      String    @map("event_name") @db.VarChar(120)
+  schemaVersion  Int       @default(1) @map("schema_version") @db.SmallInt
+  payload        Json
+  drainedAt      DateTime? @map("drained_at") @db.Timestamptz(3)
+  claimToken     String?   @map("claim_token") @db.Uuid
+  claimedAt      DateTime? @map("claimed_at") @db.Timestamptz(3)
+  attemptCount   Int       @default(0) @map("attempt_count") @db.Integer
+  lastError      String?   @map("last_error") @db.VarChar(2000)
+  deadLetteredAt DateTime? @map("dead_lettered_at") @db.Timestamptz(3)
+
+  @@index([occurredAt])
+  @@index([claimedAt])
+  @@index([deadLetteredAt])
+  @@map("outbox_events")
+  @@schema("messaging")
+}

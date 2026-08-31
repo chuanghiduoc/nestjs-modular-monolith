@@ -1,0 +1,13 @@
+model UserProfile {
+  id           String   @id @db.Uuid
+  userId       String   @unique @map("user_id") @db.Uuid
+  displayName  String   @map("display_name") @db.VarChar(80)
+  avatarFileId String?  @map("avatar_file_id") @db.Uuid
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([createdAt(sort: Desc), id(sort: Desc)])
+  @@map("user_profile")
+  @@schema("users")
+}

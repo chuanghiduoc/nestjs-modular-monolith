@@ -1,0 +1,30 @@
+enum StoredFileStatus {
+  pending
+  confirmed
+  discarded
+
+  @@map("stored_file_status")
+  @@schema("upload")
+}
+
+model StoredFile {
+  id                String           @id @db.Uuid
+  organizationId    String           @map("organization_id") @db.Uuid
+  ownerId           String           @map("owner_id") @db.Uuid
+  storageKey        String           @unique @map("storage_key") @db.VarChar(512)
+  filename          String           @db.VarChar(255)
+  declaredMimeType  String           @map("declared_mime_type") @db.VarChar(255)
+  declaredSizeBytes Int              @map("declared_size_bytes")
+  verifiedMimeType  String?          @map("verified_mime_type") @db.VarChar(255)
+  verifiedSizeBytes Int?             @map("verified_size_bytes")
+  status            StoredFileStatus @default(pending)
+  createdAt         DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
+  confirmedAt       DateTime?        @map("confirmed_at") @db.Timestamptz(3)
+  organization      Organization     @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+
+  @@index([organizationId, ownerId, createdAt(sort: Desc)])
+  @@index([createdAt(sort: Desc), id(sort: Desc)])
+  @@index([status, createdAt])
+  @@map("stored_file")
+  @@schema("upload")
+}

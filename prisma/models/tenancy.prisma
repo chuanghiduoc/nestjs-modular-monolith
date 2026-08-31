@@ -1,0 +1,60 @@
+model Organization {
+  id            String                   @id @db.Uuid
+  slug          String                   @unique @db.VarChar(80)
+  name          String                   @db.VarChar(160)
+  createdAt     DateTime                 @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt     DateTime                 @updatedAt @map("updated_at") @db.Timestamptz(3)
+  archivedAt    DateTime?                @map("archived_at") @db.Timestamptz(3)
+  subscriptions Subscription[]
+  storedFiles   StoredFile[]
+  members       OrganizationMember[]
+  invitations   OrganizationInvitation[]
+
+  @@index([createdAt(sort: Desc), id(sort: Desc)])
+  @@map("organization")
+  @@schema("tenancy")
+}
+
+enum OrganizationMemberRole {
+  owner
+  admin
+  member
+  viewer
+
+  @@map("organization_member_role")
+  @@schema("tenancy")
+}
+
+model OrganizationMember {
+  id             String                 @id @db.Uuid
+  organizationId String                 @map("organization_id") @db.Uuid
+  userId         String                 @map("user_id") @db.Uuid
+  role           OrganizationMemberRole @default(member)
+  createdAt      DateTime               @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime               @updatedAt @map("updated_at") @db.Timestamptz(3)
+  user           User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization   Organization           @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, userId])
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([organizationId, role])
+  @@map("organization_member")
+  @@schema("tenancy")
+}
+
+model OrganizationInvitation {
+  id             String                 @id @db.Uuid
+  organizationId String                 @map("organization_id") @db.Uuid
+  email          String                 @db.VarChar(320)
+  role           OrganizationMemberRole @default(member)
+  tokenHash      String                 @unique @map("token_hash") @db.VarChar(128)
+  expiresAt      DateTime               @map("expires_at") @db.Timestamptz(3)
+  acceptedAt     DateTime?              @map("accepted_at") @db.Timestamptz(3)
+  createdAt      DateTime               @default(now()) @map("created_at") @db.Timestamptz(3)
+  organization   Organization           @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, email])
+  @@index([expiresAt])
+  @@map("organization_invitation")
+  @@schema("tenancy")
+}

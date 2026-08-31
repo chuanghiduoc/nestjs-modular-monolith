@@ -1,0 +1,57 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2023"],
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "types": ["node"],
+
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": true,
+
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true,
+    "noFallthroughCasesInSwitch": true,
+    "noImplicitReturns": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noPropertyAccessFromIndexSignature": false,
+    "noUncheckedSideEffectImports": true,
+    "useUnknownInCatchVariables": true,
+
+    "isolatedModules": true,
+    "verbatimModuleSyntax": false,
+    "esModuleInterop": true,
+    "resolveJsonModule": true,
+    "forceConsistentCasingInFileNames": true,
+    "skipLibCheck": true,
+
+    "incremental": true,
+    "tsBuildInfoFile": "./node_modules/.cache/tsconfig.tsbuildinfo",
+    "sourceMap": true,
+    "declaration": false,
+    "outDir": "dist",
+    "rootDir": ".",
+
+    // Must stay identical to "imports" in package.json — Node does not fall back
+    // through an array of targets, so both sides name the directory barrel.
+    "paths": {
+      "#bootstrap/*": ["./src/bootstrap/*/index.ts"],
+      "#composition/*": ["./src/composition/*/index.ts"],
+      "#contracts/*": ["./src/contracts/*/index.ts"],
+      "#modules/*": ["./src/modules/*/index.ts"],
+      "#platform/*": ["./src/platform/*/index.ts"],
+      "#shared/*": ["./src/shared/*/index.ts"]
+    }
+  },
+  "include": [
+    "src/**/*.ts",
+    "test/**/*.ts",
+    "prisma/seed.ts",
+    "*.config.ts",
+    "*.config.mts",
+    "*.config.cjs"
+  ],
+  "exclude": ["node_modules", "dist", "test/architecture-fixtures", "scripts/templates"]
+}

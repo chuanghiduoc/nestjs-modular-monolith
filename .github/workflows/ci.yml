@@ -1,0 +1,408 @@
+name: ci
+
+on:
+  push:
+    branches: ['main']
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  NODE_VERSION: '24'
+  GITLEAKS_IMAGE: ghcr.io/gitleaks/gitleaks:v8.30.1
+  OSV_IMAGE: ghcr.io/google/osv-scanner:v2.5.0
+  TRIVY_IMAGE: aquasec/trivy:0.74.0
+  PROMETHEUS_IMAGE: prom/prometheus:v3.7.3
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec prisma generate
+      - run: pnpm format:check
+      - run: pnpm lint
+      - run: bash scripts/doctor.sh
+      - name: prometheus alert rules parse
+        run: |
+          docker run --rm -v "$PWD/ops/prometheus:/rules" \
+            --entrypoint promtool "$PROMETHEUS_IMAGE" check rules /rules/alert_rules.yml
+
+  boundaries:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec prisma generate
+      - run: pnpm boundaries
+
+  typecheck:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec prisma generate
+      - run: pnpm typecheck
+      - run: pnpm typecheck:ts6
+
+  unit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec prisma generate
+      - run: pnpm test
+
+  generator:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec prisma generate
+      - name: scaffold both tiers and check them like hand-written code
+        run: |
+          set -euo pipefail
+          trap 'rm -rf src/modules/probe-alpha src/modules/probe-beta' EXIT
+          pnpm gen:module probe-alpha --tier 1
+          pnpm gen:module probe-beta --tier 2
+          pnpm typecheck
+          pnpm boundaries
+          pnpm exec eslint src/modules/probe-alpha src/modules/probe-beta
+          pnpm exec prettier --check "src/modules/probe-*/**/*.ts"
+      - name: the scaffold is not left behind
+        run: test ! -d src/modules/probe-alpha && test ! -d src/modules/probe-beta
+
+  integration:
+    needs: [lint, boundaries, typecheck, unit]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec prisma generate
+      - name: integration + e2e (coverage gate)
+        run: pnpm test:all
+        env:
+          TESTCONTAINERS_REUSE: 'false'
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: coverage
+          path: coverage/
+          retention-days: 7
+          if-no-files-found: ignore
+
+  migration-check:
+    needs: [lint, boundaries, typecheck, unit]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:18-alpine
+        env:
+          POSTGRES_USER: app
+          POSTGRES_PASSWORD: app
+          POSTGRES_DB: app_fresh
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U app -d app_fresh"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 20
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      - name: does migrate deploy apply to an EMPTY database
+        env:
+          DATABASE_URL: postgresql://app:app@localhost:5432/app_fresh
+        run: pnpm exec prisma migrate deploy
+
+      - name: does schema.prisma match the migration history
+        env:
+          DATABASE_URL: postgresql://app:app@localhost:5432/app_fresh
+        run: |
+          set -o pipefail
+          if ! pnpm exec prisma migrate diff \
+              --from-config-datasource \
+              --to-schema prisma/ \
+              --exit-code; then
+            echo "::error::Drift between prisma/models/*.prisma and prisma/migrations."
+            echo "::error::A model was edited without a migration. Run: pnpm db:migrate"
+            exit 1
+          fi
+
+      - name: does migrate deploy apply on top of the base branch's schema
+        if: github.event_name == 'pull_request'
+        env:
+          PGPASSWORD: app
+          DATABASE_URL: postgresql://app:app@localhost:5432/app_upgrade
+        run: |
+          set -euo pipefail
+          psql -h localhost -U app -d app_fresh -c 'CREATE DATABASE app_upgrade'
+          git checkout ${{ github.event.pull_request.base.sha }} -- prisma/migrations
+          pnpm exec prisma migrate deploy
+          git checkout HEAD -- prisma/migrations
+          git clean -fd prisma/migrations
+          pnpm exec prisma migrate deploy
+
+  docker:
+    needs: [integration, migration-check]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      APP_IMAGE: nmm:ci
+      MIGRATE_IMAGE: nmm:ci-migrate
+    steps:
+      - uses: actions/checkout@v7
+      - uses: docker/setup-buildx-action@v4
+
+      - name: build runtime image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: docker/Dockerfile
+          load: true
+          tags: ${{ env.APP_IMAGE }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: build migrate image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: docker/Dockerfile
+          target: migrate
+          load: true
+          tags: ${{ env.MIGRATE_IMAGE }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: boot smoke — all three roles reach /health/ready
+        run: |
+          set -euo pipefail
+
+          docker network create smoke
+
+          docker run -d --name pg --network smoke \
+            -e POSTGRES_USER=app -e POSTGRES_PASSWORD=app -e POSTGRES_DB=app \
+            --health-cmd 'pg_isready -U app -d app' --health-interval 5s --health-retries 20 \
+            postgres:18-alpine
+          docker run -d --name redis --network smoke redis:8-alpine \
+            redis-server --save '' --appendonly no
+          docker run -d --name minio --network smoke \
+            -e MINIO_ROOT_USER=minioadmin -e MINIO_ROOT_PASSWORD=minioadmin \
+            minio/minio:RELEASE.2025-09-07T16-13-09Z server /data
+          docker run -d --name mailpit --network smoke \
+            -e MP_SMTP_AUTH_ACCEPT_ANY=1 -e MP_SMTP_AUTH_ALLOW_INSECURE=1 \
+            axllent/mailpit:v1.30
+
+          echo "waiting for postgres"
+          for i in $(seq 1 60); do
+            if [ "$(docker inspect -f '{{.State.Health.Status}}' pg)" = healthy ]; then break; fi
+            sleep 2
+          done
+
+          docker run --rm --network smoke minio/mc:RELEASE.2025-08-13T08-35-41Z \
+            sh -c 'mc alias set local http://minio:9000 minioadmin minioadmin &&
+                   mc mb --ignore-existing local/app-uploads'
+
+          cat > smoke.env <<'EOF'
+          NODE_ENV=production
+          LOG_LEVEL=warn
+          DATABASE_URL=postgresql://app:app@pg:5432/app
+          DATABASE_DIRECT_URL=
+          DATABASE_POOL_MAX=5
+          DB_PASSWORD_FILE=
+          HEALTH_PORT=3001
+          PORT=3000
+          API_PREFIX=api
+          REDIS_URL=redis://redis:6379
+          # https, not http: NODE_ENV=production runs the zod refinements, and
+          # refineApiForProduction rejects http URLs — the app sits behind a TLS-
+          # terminating proxy in a real deployment, so https here is the honest shape.
+          CORS_ORIGINS=https://localhost:5173
+          BETTER_AUTH_SECRET=ci-smoke-secret-not-a-real-one-0123456789abcdef
+          BETTER_AUTH_URL=https://localhost:3000
+          FRONTEND_BASE_URL=https://localhost:5173
+          HTTP_BODY_LIMIT_BYTES=1048576
+          HTTP_REQUEST_TIMEOUT_MS=30000
+          TRUST_INBOUND_REQUEST_ID=false
+          TRUST_PROXY=false
+          DEPLOYMENT_TOPOLOGY=direct
+          AUTH_RATE_LIMIT_MAX=5
+          AUTH_RATE_LIMIT_WINDOW_MS=900000
+          AUTH_SESSION_RATE_LIMIT_MAX=60
+          AUTH_SESSION_RATE_LIMIT_WINDOW_MS=60000
+          API_RATE_LIMIT_MAX=300
+          API_RATE_LIMIT_WINDOW_MS=60000
+          METRICS_ALLOW_CIDRS=127.0.0.1/32,::1/128
+          METRICS_CACHE_TTL_SECONDS=10
+          UPLOAD_MAX_FILE_BYTES=10485760
+          QUEUE_CONCURRENCY=2
+          MAIL_HOST=mailpit
+          MAIL_PORT=1025
+          MAIL_USER=
+          MAIL_PASSWORD=
+          MAIL_FROM=no-reply@example.com
+          S3_ENDPOINT=http://minio:9000
+          S3_BUCKET=app-uploads
+          S3_REGION=us-east-1
+          S3_ACCESS_KEY_ID=minioadmin
+          S3_SECRET_ACCESS_KEY=minioadmin
+          S3_FORCE_PATH_STYLE=true
+          OUTBOX_DRAIN_INTERVAL_SECONDS=10
+          OUTBOX_DRAIN_BATCH_SIZE=100
+          OUTBOX_RETENTION_DAYS=14
+          EOF
+
+          docker run --rm --network smoke --env-file smoke.env "$MIGRATE_IMAGE"
+
+          docker run -d --name api --network smoke --env-file smoke.env \
+            -e HEALTH_CHECK_PORT=3000 -p 3000:3000 "$APP_IMAGE" node dist/main.api.js
+          docker run -d --name worker --network smoke --env-file smoke.env \
+            -e HEALTH_CHECK_PORT=3001 -p 3101:3001 "$APP_IMAGE" node dist/main.worker.js
+          docker run -d --name scheduler --network smoke --env-file smoke.env \
+            -e HEALTH_CHECK_PORT=3001 -p 3102:3001 "$APP_IMAGE" node dist/main.scheduler.js
+
+          wait_ready() {
+            name=$1; port=$2
+            for i in $(seq 1 60); do
+              if curl -fsS "http://127.0.0.1:${port}/health/ready" >/dev/null 2>&1; then
+                echo "$name ready after ${i}s"
+                return 0
+              fi
+              if [ "$(docker inspect -f '{{.State.Running}}' "$name")" != true ]; then
+                echo "::error::$name exited before becoming ready"
+                return 1
+              fi
+              sleep 1
+            done
+            echo "::error::$name never reported ready"
+            return 1
+          }
+
+          wait_ready api 3000
+          wait_ready worker 3101
+          wait_ready scheduler 3102
+
+          for role in api worker scheduler; do
+            start=$(date +%s)
+            docker stop -t 25 "$role" >/dev/null
+            elapsed=$(( $(date +%s) - start ))
+            echo "$role shut down in ${elapsed}s"
+            if [ "$elapsed" -ge 25 ]; then
+              echo "::error::$role did not exit on SIGTERM within the 25s drain budget"
+              exit 1
+            fi
+          done
+
+      - name: container logs on failure
+        if: failure()
+        run: |
+          for c in api worker scheduler pg redis minio mailpit; do
+            echo "===== $c ====="
+            docker logs --tail 200 "$c" 2>&1 || true
+          done
+
+      - name: tear down smoke stack
+        if: always()
+        run: |
+          docker rm -f api worker scheduler pg redis minio mailpit 2>/dev/null || true
+          docker network rm smoke 2>/dev/null || true
+
+      - name: trivy — image scan
+        run: |
+          docker run --rm \
+            -v /var/run/docker.sock:/var/run/docker.sock \
+            -v "${{ github.workspace }}:/work" -w /work \
+            "$TRIVY_IMAGE" image \
+              --scanners vuln \
+              --severity HIGH,CRITICAL \
+              --exit-code 1 \
+              --no-progress \
+              --timeout 15m \
+              "$APP_IMAGE"
+
+  security:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: gitleaks — committed secrets
+        run: |
+          docker run --rm -u "$(id -u):$(id -g)" -e HOME=/tmp \
+            -v "${{ github.workspace }}:/repo" -w /repo \
+            "$GITLEAKS_IMAGE" git /repo --redact --no-banner --exit-code 1
+
+      - name: osv-scanner — dependency advisories
+        run: |
+          docker run --rm -u "$(id -u):$(id -g)" -e HOME=/tmp \
+            -v "${{ github.workspace }}:/src" -w /src \
+            "$OSV_IMAGE" scan source --lockfile /src/pnpm-lock.yaml
+
+  ci:
+    if: always()
+    needs:
+      [lint, boundaries, typecheck, unit, generator, integration, migration-check, docker, security]
+    runs-on: ubuntu-latest
+    steps:
+      - name: every gate green
+        run: |
+          if [ "${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') || contains(needs.*.result, 'skipped') }}" = "true" ]; then
+            echo "::error::One or more required jobs did not succeed."
+            exit 1
+          fi

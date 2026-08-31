@@ -1,0 +1,62 @@
+export const VALIDATION_CODES = {
+  REQUIRED: 'required',
+  WRONG_TYPE: 'wrong_type',
+  TOO_SHORT: 'too_short',
+  TOO_LONG: 'too_long',
+  OUT_OF_RANGE: 'out_of_range',
+  INVALID_EMAIL: 'invalid_email',
+  INVALID_UUID: 'invalid_uuid',
+  INVALID_URL: 'invalid_url',
+  INVALID_DATE: 'invalid_date',
+  INVALID_ENUM_VALUE: 'invalid_enum_value',
+  INVALID_FORMAT: 'invalid_format',
+  INVALID_LENGTH: 'invalid_length',
+  UNKNOWN_FIELD: 'unknown_field',
+} as const;
+
+export type ValidationCode = (typeof VALIDATION_CODES)[keyof typeof VALIDATION_CODES];
+
+const BY_CONSTRAINT: Readonly<Record<string, ValidationCode>> = {
+  isDefined: VALIDATION_CODES.REQUIRED,
+  isNotEmpty: VALIDATION_CODES.REQUIRED,
+  isNotEmptyObject: VALIDATION_CODES.REQUIRED,
+
+  isString: VALIDATION_CODES.WRONG_TYPE,
+  isNumber: VALIDATION_CODES.WRONG_TYPE,
+  isInt: VALIDATION_CODES.WRONG_TYPE,
+  isBoolean: VALIDATION_CODES.WRONG_TYPE,
+  isArray: VALIDATION_CODES.WRONG_TYPE,
+  isObject: VALIDATION_CODES.WRONG_TYPE,
+  isNumberString: VALIDATION_CODES.WRONG_TYPE,
+
+  isLength: VALIDATION_CODES.INVALID_LENGTH,
+  minLength: VALIDATION_CODES.TOO_SHORT,
+  arrayMinSize: VALIDATION_CODES.TOO_SHORT,
+  maxLength: VALIDATION_CODES.TOO_LONG,
+  arrayMaxSize: VALIDATION_CODES.TOO_LONG,
+
+  min: VALIDATION_CODES.OUT_OF_RANGE,
+  max: VALIDATION_CODES.OUT_OF_RANGE,
+  isPositive: VALIDATION_CODES.OUT_OF_RANGE,
+  isNegative: VALIDATION_CODES.OUT_OF_RANGE,
+
+  isEmail: VALIDATION_CODES.INVALID_EMAIL,
+  isUuid: VALIDATION_CODES.INVALID_UUID,
+  isUrl: VALIDATION_CODES.INVALID_URL,
+  isDate: VALIDATION_CODES.INVALID_DATE,
+  isDateString: VALIDATION_CODES.INVALID_DATE,
+  isIso8601: VALIDATION_CODES.INVALID_DATE,
+
+  isIn: VALIDATION_CODES.INVALID_ENUM_VALUE,
+  isEnum: VALIDATION_CODES.INVALID_ENUM_VALUE,
+
+  matches: VALIDATION_CODES.INVALID_FORMAT,
+  isAlphanumeric: VALIDATION_CODES.INVALID_FORMAT,
+  isJson: VALIDATION_CODES.INVALID_FORMAT,
+
+  whitelistValidation: VALIDATION_CODES.UNKNOWN_FIELD,
+};
+
+export function validationCodeFor(constraint: string): string {
+  return BY_CONSTRAINT[constraint] ?? constraint;
+}

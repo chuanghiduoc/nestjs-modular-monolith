@@ -1,0 +1,29 @@
+name: Feature request
+description: Propose something this boilerplate should carry
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: What breaks or costs time today. Not the solution yet.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposal
+    validations:
+      required: true
+  - type: textarea
+    id: cost
+    attributes:
+      label: What it costs
+      description: New dependency, new env variable, new runtime failure mode, new thing to operate. Every addition has one.
+    validations:
+      required: true
+  - type: textarea
+    id: cut
+    attributes:
+      label: Was it cut on purpose?
+      description: Check `docs/architecture.md` and `docs/decisions/` first. If it is listed there, say what changed.

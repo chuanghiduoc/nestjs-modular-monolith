@@ -1,0 +1,20 @@
+# The repository stores LF and every checkout gets LF, on every platform.
+# Without this, a Windows clone lands CRLF in the working tree and
+# `pnpm format:check` fails on files nobody touched — Prettier is configured
+# with `endOfLine: lf`.
+* text=auto eol=lf
+
+# Shell scripts stop working entirely if they are checked out with CRLF.
+*.sh text eol=lf
+
+# Generated: collapse it in review, and never let a merge tool try to fix it.
+pnpm-lock.yaml linguist-generated=true
+
+# Binary assets git must not try to normalise.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.ico binary
+*.pdf binary

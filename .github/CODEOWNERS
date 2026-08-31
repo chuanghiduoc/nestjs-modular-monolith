@@ -1,0 +1,7 @@
+* @chuanghiduoc
+
+/prisma/                        @chuanghiduoc
+/ops/postgres/                  @chuanghiduoc
+/src/platform/auth/             @chuanghiduoc
+/.github/workflows/             @chuanghiduoc
+/docs/decisions/                @chuanghiduoc

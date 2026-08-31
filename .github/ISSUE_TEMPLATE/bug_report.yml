@@ -1,0 +1,35 @@
+name: Bug report
+description: Something behaves differently from what the docs or tests claim
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: Include the request, the response, and the `requestId` from the body or the `x-request-id` header.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What should have happened
+      description: Point at the doc, ADR or test that says so, if there is one.
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Reproduction
+      description: The shortest sequence that produces it. A failing test is ideal.
+    validations:
+      required: true
+  - type: input
+    id: role
+    attributes:
+      label: Which role
+      placeholder: api / worker / scheduler
+  - type: textarea
+    id: versions
+    attributes:
+      label: Versions
+      description: Output of `node -v`, `pnpm -v`, `docker --version`, and the commit.

@@ -1,0 +1,67 @@
+groups:
+  - name: nestjs-modular-monolith
+    rules:
+      - alert: QueueStalled
+        expr: max by (queue) (queue_oldest_job_age_seconds) > 300
+        for: 5m
+        labels:
+          severity: page
+        annotations:
+          summary: 'Queue {{ $labels.queue }} has not been drained for over 5 minutes'
+          description: >-
+            The oldest job in {{ $labels.queue }} is {{ $value | humanizeDuration }} old.
+            Asynchronous work has stopped: no emails, no audit rows, nothing.
+            Check that the worker role is running and that its BullMQ Redis connection is up.
+
+      - alert: DeadLetterGrew
+        expr: increase(queue_deadletter_depth[10m]) > 0
+        for: 0m
+        labels:
+          severity: page
+        annotations:
+          summary: 'A job in {{ $labels.queue }} gave up permanently'
+          description: >-
+            {{ $value }} job(s) moved to the dead-letter queue for {{ $labels.queue }}
+            in the last 10 minutes. Nothing will retry them; they need a human decision.
+
+      - alert: OutboxNotDraining
+        expr: outbox_undrained_total > 0
+        for: 5m
+        labels:
+          severity: page
+        annotations:
+          summary: 'Auth-sourced events are not becoming jobs'
+          description: >-
+            {{ $value }} outbox row(s) have been undrained for 5 minutes. The drain
+            re-arms every 10s when idle, so this is ~30 missed passes — never a slow
+            tick. Check the scheduler role.
+
+      - alert: OutboxQuarantined
+        expr: outbox_quarantined_total > 0
+        for: 0m
+        labels:
+          severity: page
+        annotations:
+          summary: 'Outbox events were quarantined and will never be delivered'
+          description: >-
+            {{ $value }} outbox row(s) are dead-lettered: the relay either exceeded its
+            attempt budget or the event failed its contract. OutboxNotDraining cannot see
+            them — countUndrained excludes dead-lettered rows — so without this alert the
+            loss is silent. Read last_error in messaging.outbox_events, fix the cause,
+            then clear dead_lettered_at for the rows worth replaying; retention prunes
+            them after the outbox window either way.
+
+      - alert: HighServerErrorRate
+        expr: >-
+          sum(rate(http_request_duration_seconds_count{status=~"5.."}[5m]))
+          /
+          clamp_min(sum(rate(http_request_duration_seconds_count[5m])), 0.001)
+          > 0.01
+        for: 5m
+        labels:
+          severity: page
+        annotations:
+          summary: 'Over 1% of requests are failing with 5xx'
+          description: >-
+            {{ $value | humanizePercentage }} of requests returned 5xx over the last
+            5 minutes. The API is failing for real users.

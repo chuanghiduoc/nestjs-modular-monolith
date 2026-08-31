@@ -1,0 +1,17 @@
+model AuditLog {
+  id             String   @id @db.Uuid
+  occurredAt     DateTime @map("occurred_at") @db.Timestamptz(3)
+  actorId        String?  @map("actor_id") @db.Uuid
+  organizationId String?  @map("organization_id") @db.Uuid
+  action         String   @db.VarChar(120)
+  resource       String   @db.VarChar(120)
+  resourceId     String?  @map("resource_id") @db.Uuid
+  requestId      String?  @map("request_id") @db.Uuid
+  metadata       Json     @default("{}")
+
+  @@index([occurredAt(sort: Desc), id(sort: Desc)])
+  @@index([actorId, occurredAt(sort: Desc)])
+  @@index([organizationId, occurredAt(sort: Desc)])
+  @@map("audit_log")
+  @@schema("audit")
+}

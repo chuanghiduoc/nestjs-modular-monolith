@@ -1,0 +1,112 @@
+name: nestjs-modular-monolith
+
+x-core-env: &core-env
+  NODE_ENV: production
+  LOG_LEVEL: ${LOG_LEVEL:-info}
+  DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
+  DATABASE_DIRECT_URL: ${DATABASE_DIRECT_URL:-}
+  DATABASE_POOL_MAX: ${DATABASE_POOL_MAX:-10}
+  DB_PASSWORD_FILE: ${DB_PASSWORD_FILE:-}
+  HEALTH_PORT: ${HEALTH_PORT:-3001}
+
+x-storage-env: &storage-env
+  S3_ENDPOINT: ${S3_ENDPOINT:?S3_ENDPOINT is required by the api and worker roles}
+  S3_BUCKET: ${S3_BUCKET:?S3_BUCKET is required by the api and worker roles}
+  S3_REGION: ${S3_REGION:-us-east-1}
+  S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:?S3_ACCESS_KEY_ID is required}
+  S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:?S3_SECRET_ACCESS_KEY is required}
+  S3_FORCE_PATH_STYLE: ${S3_FORCE_PATH_STYLE:-false}
+  UPLOAD_MAX_FILE_BYTES: ${UPLOAD_MAX_FILE_BYTES:-10485760}
+
+x-service-defaults: &service-defaults
+  image: ${APP_IMAGE:?APP_IMAGE is required, e.g. ghcr.io/org/app@sha256:...}
+  restart: unless-stopped
+  stop_grace_period: 30s
+  logging:
+    driver: json-file
+    options:
+      max-size: '10m'
+      max-file: '3'
+  depends_on:
+    migrate:
+      condition: service_completed_successfully
+
+services:
+  migrate:
+    image: ${MIGRATE_IMAGE:?MIGRATE_IMAGE is required, e.g. ghcr.io/org/app@sha256:...}
+    restart: 'no'
+    command:
+      - sh
+      - -c
+      - >-
+        node node_modules/prisma/build/index.js migrate deploy
+    environment:
+      <<: *core-env
+      DATABASE_URL: ${DATABASE_URL_MIGRATE:-${DATABASE_URL}}
+
+  api:
+    <<: *service-defaults
+    command: ['node', 'dist/main.api.js']
+    ports:
+      - '${API_BIND_HOST:-127.0.0.1}:${API_PORT:-3000}:3000'
+    environment:
+      <<: [*core-env, *storage-env]
+      DATABASE_URL: ${DATABASE_URL_API:-${DATABASE_URL}}
+      PORT: 3000
+      HEALTH_CHECK_PORT: 3000
+      API_PREFIX: ${API_PREFIX:-api}
+      REDIS_URL: ${REDIS_URL:?REDIS_URL is required for the api role}
+      CORS_ORIGINS: ${CORS_ORIGINS:?CORS_ORIGINS is required and must include FRONTEND_BASE_URL}
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?BETTER_AUTH_SECRET is required}
+      BETTER_AUTH_URL: ${BETTER_AUTH_URL:?BETTER_AUTH_URL is required}
+      FRONTEND_BASE_URL: ${FRONTEND_BASE_URL:?FRONTEND_BASE_URL is required}
+      HTTP_BODY_LIMIT_BYTES: ${HTTP_BODY_LIMIT_BYTES:-1048576}
+      HTTP_REQUEST_TIMEOUT_MS: ${HTTP_REQUEST_TIMEOUT_MS:-30000}
+      TRUST_INBOUND_REQUEST_ID: ${TRUST_INBOUND_REQUEST_ID:-false}
+      TRUST_PROXY: ${TRUST_PROXY:-false}
+      DEPLOYMENT_TOPOLOGY: ${DEPLOYMENT_TOPOLOGY:-direct}
+      AUTH_RATE_LIMIT_MAX: ${AUTH_RATE_LIMIT_MAX:-5}
+      AUTH_RATE_LIMIT_WINDOW_MS: ${AUTH_RATE_LIMIT_WINDOW_MS:-900000}
+      AUTH_ACCOUNT_RATE_LIMIT_MAX: ${AUTH_ACCOUNT_RATE_LIMIT_MAX:-5}
+      AUTH_ACCOUNT_RATE_LIMIT_WINDOW_MS: ${AUTH_ACCOUNT_RATE_LIMIT_WINDOW_MS:-900000}
+      AUTH_SESSION_RATE_LIMIT_MAX: ${AUTH_SESSION_RATE_LIMIT_MAX:-60}
+      AUTH_SESSION_RATE_LIMIT_WINDOW_MS: ${AUTH_SESSION_RATE_LIMIT_WINDOW_MS:-60000}
+      API_RATE_LIMIT_MAX: ${API_RATE_LIMIT_MAX:-300}
+      API_RATE_LIMIT_WINDOW_MS: ${API_RATE_LIMIT_WINDOW_MS:-60000}
+      METRICS_ALLOW_CIDRS: ${METRICS_ALLOW_CIDRS:?METRICS_ALLOW_CIDRS is required, an empty list fails closed}
+      METRICS_CACHE_TTL_SECONDS: ${METRICS_CACHE_TTL_SECONDS:-10}
+
+  worker:
+    <<: *service-defaults
+    command: ['node', 'dist/main.worker.js']
+    environment:
+      <<: [*core-env, *storage-env]
+      REDIS_URL: ${REDIS_URL:?REDIS_URL is required for the worker role}
+      DATABASE_URL: ${DATABASE_URL_WORKER:-${DATABASE_URL}}
+      HEALTH_CHECK_PORT: ${HEALTH_PORT:-3001}
+      QUEUE_CONCURRENCY: ${QUEUE_CONCURRENCY:-5}
+      AUDIT_RETENTION_DAYS: ${AUDIT_RETENTION_DAYS:-365}
+      MAIL_HOST: ${MAIL_HOST:?MAIL_HOST is required for the worker role}
+      MAIL_PORT: ${MAIL_PORT:-587}
+      MAIL_USER: ${MAIL_USER:-}
+      MAIL_PASSWORD: ${MAIL_PASSWORD:-}
+      MAIL_FROM: ${MAIL_FROM:?MAIL_FROM is required for the worker role}
+      FRONTEND_BASE_URL: ${FRONTEND_BASE_URL:?FRONTEND_BASE_URL is required for the worker role in production}
+      METRICS_ALLOW_CIDRS: ${METRICS_ALLOW_CIDRS:?METRICS_ALLOW_CIDRS is required, an empty list fails closed}
+      METRICS_CACHE_TTL_SECONDS: ${METRICS_CACHE_TTL_SECONDS:-10}
+
+  scheduler:
+    <<: *service-defaults
+    command: ['node', 'dist/main.scheduler.js']
+    deploy:
+      replicas: 1
+    environment:
+      <<: *core-env
+      REDIS_URL: ${REDIS_URL:?REDIS_URL is required for the scheduler role}
+      DATABASE_URL: ${DATABASE_URL_SCHEDULER:-${DATABASE_URL}}
+      HEALTH_CHECK_PORT: ${HEALTH_PORT:-3001}
+      OUTBOX_DRAIN_INTERVAL_SECONDS: ${OUTBOX_DRAIN_INTERVAL_SECONDS:-10}
+      OUTBOX_DRAIN_BATCH_SIZE: ${OUTBOX_DRAIN_BATCH_SIZE:-100}
+      OUTBOX_RETENTION_DAYS: ${OUTBOX_RETENTION_DAYS:-14}
+      METRICS_ALLOW_CIDRS: ${METRICS_ALLOW_CIDRS:?METRICS_ALLOW_CIDRS is required, an empty list fails closed}
+      METRICS_CACHE_TTL_SECONDS: ${METRICS_CACHE_TTL_SECONDS:-10}

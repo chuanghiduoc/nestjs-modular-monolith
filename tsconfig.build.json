@@ -1,0 +1,15 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "dist",
+    // Inside dist so `rm -rf dist` also drops the cache; otherwise tsc exits 0
+    // having emitted nothing.
+    "tsBuildInfoFile": "dist/.tsbuildinfo",
+    "sourceMap": true,
+    "declaration": false,
+    "removeComments": false
+  },
+  "include": ["src/**/*.ts"],
+  "exclude": ["node_modules", "dist", "src/**/*.spec.ts", "src/**/*.integration.ts"]
+}
