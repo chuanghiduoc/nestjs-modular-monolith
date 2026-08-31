@@ -1,0 +1,16 @@
+title = "nestjs-modular-monolith"
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = """
+The env-loader spec asserts that production refuses a placeholder secret and
+accepts a real-looking one, so it has to contain a string shaped like a secret.
+The value is a literal written for the test and has never been a credential.
+Scoped to that one file and that one string so a genuine leak elsewhere in the
+spec suite still fails the build.
+"""
+condition = "AND"
+paths = ['''src/bootstrap/config/load-env\.spec\.ts''']
+regexes = ['''k7Qz2Rt9Wm4Yb8Nc1Vx6Hj3Lp5Sd0FgT2''']
