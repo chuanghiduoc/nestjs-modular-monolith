@@ -59,39 +59,23 @@ export const INTEGRATION_EVENT_SCHEMAS = {
   [INTEGRATION_EVENTS.ORGANIZATION_PURGED]: organizationLifecyclePayloadSchema,
 } as const satisfies Record<IntegrationEventName, z.ZodType>;
 
-const anyIntegrationEventSchema = z.union([
-  integrationEventEnvelopeSchema.extend({
-    name: z.literal(INTEGRATION_EVENTS.USER_REGISTERED),
-    payload: userRegisteredPayloadSchema,
-  }),
-  integrationEventEnvelopeSchema.extend({
-    name: z.literal(INTEGRATION_EVENTS.USER_EMAIL_VERIFIED),
-    payload: userEmailVerifiedPayloadSchema,
-  }),
-  integrationEventEnvelopeSchema.extend({
-    name: z.literal(INTEGRATION_EVENTS.USER_DELETED),
-    payload: userDeletedPayloadSchema,
-  }),
-  integrationEventEnvelopeSchema.extend({
-    name: z.literal(INTEGRATION_EVENTS.UPLOAD_CONFIRMED),
-    payload: uploadConfirmedPayloadSchema,
-  }),
-  integrationEventEnvelopeSchema.extend({
-    name: z.literal(INTEGRATION_EVENTS.ORGANIZATION_ARCHIVED),
-    payload: organizationLifecyclePayloadSchema,
-  }),
-  integrationEventEnvelopeSchema.extend({
-    name: z.literal(INTEGRATION_EVENTS.ORGANIZATION_RESTORED),
-    payload: organizationLifecyclePayloadSchema,
-  }),
-  integrationEventEnvelopeSchema.extend({
-    name: z.literal(INTEGRATION_EVENTS.ORGANIZATION_PURGED),
-    payload: organizationLifecyclePayloadSchema,
-  }),
-]);
+const integrationEventNames = Object.keys(INTEGRATION_EVENT_SCHEMAS) as [
+  IntegrationEventName,
+  ...IntegrationEventName[],
+];
+
+const namedEnvelopeSchema = integrationEventEnvelopeSchema.extend({
+  name: z.enum(integrationEventNames),
+});
 
 export function parseAnyIntegrationEvent(raw: unknown): z.ZodSafeParseResult<IntegrationEvent> {
-  return anyIntegrationEventSchema.safeParse(raw);
+  const envelope = namedEnvelopeSchema.safeParse(raw);
+
+  if (!envelope.success) {
+    return envelope as z.ZodSafeParseResult<IntegrationEvent>;
+  }
+
+  return parseIntegrationEvent(envelope.data.name, raw);
 }
 
 export type IntegrationEventPayload<TName extends IntegrationEventName> = z.infer<
