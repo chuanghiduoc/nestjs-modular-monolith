@@ -12,6 +12,8 @@ allowBuilds:
 
 minimumReleaseAgeExclude:
   - deepmerge-ts@8.0.2
+  - '@nestjs/terminus@12.0.0'
+  - nestjs-pino@5.0.0
 
 # One fastify for the whole tree. @nestjs/platform-fastify pins its own copy,
 # and two copies make FastifyInstance structurally incompatible with itself —
