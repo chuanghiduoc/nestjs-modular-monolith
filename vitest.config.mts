@@ -10,25 +10,6 @@ const alias = AREAS.map((area) => ({
   replacement: `${fileURLToPath(new URL(`./src/${area}/`, import.meta.url))}$1/index.ts`,
 }));
 
-/**
- * BullMQ shuts a worker down by dropping the socket under its blocking Redis
- * connection, and ioredis then rejects the command that was still in flight with
- * "Connection is closed." That promise lives inside the library — no application
- * code owns it or can await it — so Vitest counts it as an unhandled error and a
- * run in which every test passed still exits non-zero. It only ever appears once
- * a container-backed suite is tearing down, after the assertions have run.
- *
- * The filter is that exact message from an ioredis frame and nothing else. Any
- * other unhandled rejection, including a different ioredis failure, still fails
- * the run. `dangerouslyIgnoreUnhandledErrors` would have hidden all of them.
- */
-function isBullMqShutdownRejection(error: {
-  message?: string | undefined;
-  stack?: string | undefined;
-}): boolean {
-  return error.message === 'Connection is closed.' && (error.stack ?? '').includes('ioredis');
-}
-
 export default defineConfig({
   plugins: [
     swc.vite({
@@ -44,7 +25,6 @@ export default defineConfig({
   test: {
     globals: false,
     environment: 'node',
-    onUnhandledError: (error) => (isBullMqShutdownRejection(error) ? false : undefined),
     projects: [
       {
         extends: true,

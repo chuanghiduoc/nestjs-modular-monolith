@@ -12,6 +12,9 @@ allowBuilds:
 
 minimumReleaseAgeExclude:
   - deepmerge-ts@8.0.2
+  - '@nestjs/terminus@12.0.0'
+  - nestjs-pino@5.0.0
+  - bullmq@6.3.4
 
 # One fastify for the whole tree. @nestjs/platform-fastify pins its own copy,
 # and two copies make FastifyInstance structurally incompatible with itself —
@@ -19,7 +22,6 @@ minimumReleaseAgeExclude:
 overrides:
   fastify: 5.12.1
   deepmerge-ts: 8.0.2
-  bullmq>ioredis: 5.10.1
   # The prisma CLI depends on mysql2 at an exact 3.15.3, and every version up to
   # and including 3.23.0 carries GHSA-rgwj-5xj2-c3m3 — a decompression bomb that
   # osv-scanner fails the build on. Nothing here ever opens a mysql connection,

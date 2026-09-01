@@ -34,13 +34,6 @@ updates:
       - dependency-name: '@typescript/native'
         update-types:
           - version-update:semver-major
-      # better-auth 1.7 keys accounts on (issuer, accountId) and makes
-      # Account.issuer required, so the bump only lands together with a schema
-      # change and a backfill — not on a dependency PR. Patches to 1.6 still
-      # come through. Drop this entry when the 1.7 migration is done.
-      - dependency-name: better-auth
-        update-types:
-          - version-update:semver-minor
 
   - package-ecosystem: github-actions
     directory: /

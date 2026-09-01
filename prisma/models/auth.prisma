@@ -38,6 +38,7 @@ model Session {
 
 model Account {
   id                    String    @id @db.Uuid
+  issuer                String    @db.VarChar(255)
   accountId             String    @map("account_id") @db.VarChar(255)
   providerId            String    @map("provider_id") @db.VarChar(64)
   userId                String    @map("user_id") @db.Uuid
@@ -52,6 +53,7 @@ model Account {
   createdAt             DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt             DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
 
+  @@unique([issuer, accountId])
   @@index([userId])
   @@map("account")
   @@schema("auth")

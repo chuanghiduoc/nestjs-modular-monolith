@@ -86,6 +86,7 @@ export class ApiModule {
         I18nModule,
 
         ThrottlerModule.forRootAsync({
+          imports: [],
           inject: [RedisService],
           useFactory: (redis: RedisService) => ({
             throttlers: [{ ttl: env.API_RATE_LIMIT_WINDOW_MS, limit: env.API_RATE_LIMIT_MAX }],

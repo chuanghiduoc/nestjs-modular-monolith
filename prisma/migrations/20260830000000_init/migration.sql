@@ -89,6 +89,7 @@ CREATE TABLE "auth"."session" (
 -- CreateTable
 CREATE TABLE "auth"."account" (
     "id" UUID NOT NULL,
+    "issuer" VARCHAR(255) NOT NULL,
     "account_id" VARCHAR(255) NOT NULL,
     "provider_id" VARCHAR(64) NOT NULL,
     "user_id" UUID NOT NULL,
@@ -281,6 +282,9 @@ CREATE UNIQUE INDEX "session_token_key" ON "auth"."session"("token");
 
 -- CreateIndex
 CREATE INDEX "account_user_id_idx" ON "auth"."account"("user_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "account_issuer_account_id_key" ON "auth"."account"("issuer", "account_id");
 
 -- CreateIndex
 CREATE INDEX "verification_identifier_idx" ON "auth"."verification"("identifier");

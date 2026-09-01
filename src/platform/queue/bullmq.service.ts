@@ -28,10 +28,6 @@ export class BullMqService
     QUEUE_DEFINITIONS.map((definition) => [definition.name, definition]),
   );
 
-  // Each Queue opens its own socket. Sharing one client across queues would cut
-  // the connection count from one-per-queue to one-per-process, but BullMQ 5
-  // bundles ioredis 5 while this project runs ioredis 6 — handing it our client
-  // would mean passing an incompatible one. Revisit when the two agree.
   constructor(@Inject(QUEUE_OPTIONS) private readonly options: QueueModuleOptions) {
     for (const definition of QUEUE_DEFINITIONS) {
       this.register(
