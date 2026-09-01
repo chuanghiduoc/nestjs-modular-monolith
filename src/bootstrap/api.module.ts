@@ -86,11 +86,6 @@ export class ApiModule {
         I18nModule,
 
         ThrottlerModule.forRootAsync({
-          // @nestjs/throttler is still a CommonJS package, and Nest 12 ships
-          // ESM only, so its declarations cannot resolve ModuleMetadata any
-          // more — `Pick<any, 'imports'>` leaves `imports` required instead of
-          // optional. RedisModule is @Global, so an empty list is exactly what
-          // was already in force. Drop this once throttler supports Nest 12.
           imports: [],
           inject: [RedisService],
           useFactory: (redis: RedisService) => ({
